@@ -62,9 +62,12 @@ python ops_cli.py
 When you first run the application, you will be prompted to configure:
 
 1. **API URL**: Default is `http://localhost:11434/v1/chat/completions`
-2. **Model**: Default is "default"
+2. **VLM Model**: Default is "qwen3-vl:32b"
 3. **UI-Ins API URL**: Default is `http://localhost:2345/v1/chat/completions`
-4. **UI-Ins Model**: Default is "default"
+4. **UI-Ins Model**: Default is "ui-ins-7b"
+
+*Note: The recommended online VLM model is "qwen3-vl-32b-thinking" on ModelScope.
+*Note: The UI-Ins model is used for element localization in image-based conversations. If you don't have a local UI-Ins server, you can use the model "gui-plus" on ModelScope.
 
 ### Interactive Commands
 
