@@ -1,0 +1,12 @@
+# Ops CLI Dependencies
+
+# Core Libraries
+requests>=2.31.0
+pillow>=10.1.0
+beautifulsoup4>=4.12.0
+
+# RAG and Document Processing
+llama-index-core>=0.10.0
+llama-index-embeddings-openai>=0.1.0
+
+# Optional: For better performance

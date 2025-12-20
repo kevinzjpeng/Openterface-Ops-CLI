@@ -1,0 +1,18 @@
+# UI-Ins Server Dependencies
+
+# Core ML/DL Libraries
+torch>=2.1.0
+transformers>=4.35.0
+
+# Web Framework
+flask>=2.3.0
+
+# Image Processing
+pillow>=10.1.0
+
+# HTTP Requests
+requests>=2.31.0
+
+# Optional: For better performance
+torchvision>=0.16.0
+accelerate>=0.24.0
