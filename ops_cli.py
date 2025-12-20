@@ -846,12 +846,12 @@ def main():
             user_input = input(_("messages.your_question")).strip()
             
             # Handle various commands
-            if user_input.lower() in ['quit', 'exit', 'q']:
+            if user_input.lower() in ['/quit', '/exit', '/q']:
                 print(_("messages.goodbye"))
                 break
             
             # Handle clear command
-            if user_input.lower() in ['clear', 'cls']:
+            if user_input.lower() in ['/clear', '/cls']:
                 print(_("messages.history_cleared"))
                 # Clear conversation history
                 global conversation_history
@@ -859,17 +859,17 @@ def main():
                 continue
             
             # Handle help command
-            if user_input.lower() == 'help':
+            if user_input.lower() == '/help':
                 print_help()
                 continue
             
             # Handle info command
-            if user_input.lower() == 'info':
+            if user_input.lower() == '/info':
                 print_api_info(api_url)
                 continue
             
             # Handle model switch command
-            if user_input.lower() == 'model':
+            if user_input.lower() == '/model':
                 new_model = input("   " + _("messages.enter_model") + " ").strip()
                 if new_model:
                     model = new_model
@@ -877,7 +877,7 @@ def main():
                 continue
             
             # Handle language command
-            if user_input.lower().startswith('lang'):
+            if user_input.lower().startswith('/lang'):
                 parts = user_input.split()
                 if len(parts) == 1:
                     # Show current language
@@ -894,7 +894,7 @@ def main():
                 continue
             
             # Handle multiturn conversation mode command
-            if user_input.lower() == 'multiturn':
+            if user_input.lower() == '/multiturn':
                 print(_("messages.multiturn_mode"))
                 print(_("messages.multiturn_info_1"))
                 print(_("messages.multiturn_info_2"))
@@ -910,7 +910,7 @@ def main():
                 continue
             
             # Handle exit multiturn conversation mode command
-            if user_input.lower() == 'single':
+            if user_input.lower() == '/single':
                 print(_("messages.single_mode"))
                 is_multiturn_mode = False
                 # Clear conversation history
@@ -918,7 +918,7 @@ def main():
                 continue
             
             # Handle "load docs" command
-            if user_input.lower() == 'load docs':
+            if user_input.lower() == '/load docs':
                 print(_("messages.loading_docs"))
                 success = build_index_from_docs()
                 if success:
@@ -930,7 +930,7 @@ def main():
                 continue
             
             # Handle image command
-            if user_input.lower() == 'image':
+            if user_input.lower() == '/image':
                 # Get image from server
                 print(_("messages.getting_image"))
                 image_path = get_last_image_from_server()

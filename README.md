@@ -71,26 +71,26 @@ When you first run the application, you will be prompted to configure:
 During the conversation, you can use the following commands:
 
 #### Basic Commands
-- `quit` or `exit` or `q`: Exit the application
-- `clear` or `cls`: Clear conversation history
-- `help`: Show help information
-- `info`: Show API information
-- `model`: Switch to a different model
+- `/quit` or `/exit` or `/q`: Exit the application
+- `/clear` or `/cls`: Clear conversation history
+- `/help`: Show help information
+- `/info`: Show API information
+- `/model`: Switch to a different model
 
 #### Language Commands
-- `lang`: Show current language
-- `lang en`: Switch to English
-- `lang zh`: Switch to Chinese
+- `/lang`: Show current language
+- `/lang en`: Switch to English
+- `/lang zh`: Switch to Chinese
 
 #### Conversation Mode
-- `multiturn`: Enable multi-turn conversation mode
-- `single`: Switch back to single-turn mode
+- `/multiturn`: Enable multi-turn conversation mode
+- `/single`: Switch back to single-turn mode
 
 #### RAG Functionality
-- `load docs`: Load documents and build RAG index
+- `/load docs`: Load documents and build RAG index
 
 #### Image Processing
-- `image`: Get the latest image from Openterface server and start image-based conversation
+- `/image`: Get the latest image from Openterface server and start image-based conversation
 
 ### Normal Conversation
 
@@ -100,21 +100,21 @@ During the conversation, you can use the following commands:
 
 ### Multi-turn Conversation
 
-1. Type `multiturn` to enable multi-turn mode
+1. Type `/multiturn` to enable multi-turn mode
 2. The application will maintain conversation history
 3. Responses will be context-aware
-4. Type `single` to exit multi-turn mode
+4. Type `/single` to exit multi-turn mode
 
 ### RAG Usage
 
-1. Type `load docs` to load documents from the `./docs` directory
+1. Type `/load docs` to load documents from the `./docs` directory
 2. The application will build a vector index automatically
 3. Ask questions related to your documents
 4. The AI will use relevant documents to generate more accurate responses
 
 ### Image-based Conversation
 
-1. Type `image` to get the latest image from the server
+1. Type `/image` to get the latest image from the server
 2. Enter your question about the image
 3. The AI will analyze the image and provide a response
 4. If the response contains `<click>` tags, the application will automatically process UI element requests
@@ -148,7 +148,7 @@ AI Response:
 Hello! How can I assist you today?
 ----------------------------------------
 
-Your question: lang zh
+Your question: /lang zh
 
 Current language: en
 Language switched to zh
@@ -163,7 +163,7 @@ AI Response:
 你好！我能为你做些什么？
 ----------------------------------------
 
-Your question: quit
+Your question: /quit
 
 Goodbye!
 ```
