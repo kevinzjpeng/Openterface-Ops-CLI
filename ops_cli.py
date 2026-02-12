@@ -4,70 +4,103 @@ Integrated UI Chat Client
 Intelligent dialogue client integrating Openterface AI Chat Client and UI-Ins model functionality
 """
 
+from __future__ import annotations
+
 import requests
 import json
 import os
 import socket
 import datetime
 import re
+import logging
 from typing import Dict, Any, Optional, List
 from PIL import Image, ImageDraw
+from dotenv import load_dotenv
 
-# LlamaIndex imports
-from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, StorageContext, load_index_from_storage
-from llama_index.core.readers.base import BaseReader
-from llama_index.core.schema import Document
-from llama_index.embeddings.openai import OpenAIEmbedding
+# Configure logging to file
+log_file = "debug.log"
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file),
+        logging.StreamHandler()  # Also print to console
+    ]
+)
+logger = logging.getLogger(__name__)
 
-# Import necessary libraries
-import re
+# Load environment variables early to determine execution modes
+load_dotenv()
+LLM_MODE = os.getenv("LLM_MODE", "online").lower()
+UI_INS_MODE = os.getenv("UI_INS_MODE", "online").lower()
+RAG_MODE = os.getenv("RAG_MODE", "online").lower()
+
+# Conditional imports based on execution modes
+# LlamaIndex modules needed for local RAG mode
+if RAG_MODE == "local":
+    try:
+        from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, StorageContext, load_index_from_storage
+        from llama_index.core.readers.base import BaseReader
+        from llama_index.core.schema import Document
+        from llama_index.embeddings.openai import OpenAIEmbedding
+        RAG_AVAILABLE = True
+    except ImportError:
+        print("⚠️  RAG local mode dependencies not found.")
+        print("    Install with: pip install -r requirements_ops_cli.txt")
+        RAG_AVAILABLE = False
+else:
+    RAG_AVAILABLE = False
+
+# Common imports
 import quopri
 from bs4 import BeautifulSoup
 
 
-class MHTMLReader(BaseReader):
-    """Custom MHTML file reader"""
-    def load_data(self, file_path: str, extra_info: dict = None) -> list[Document]:
-        """Load MHTML file and extract visible content"""
-        with open(file_path, 'rb') as f:
-            mhtml_content = f.read()
-        
-        # Decode to string
-        mhtml_content = mhtml_content.decode('utf-8', errors='ignore')
-        
-        # Find HTML part
-        boundary_match = re.search(r'boundary="([^"]+)"', mhtml_content)
-        if not boundary_match:
-            return [Document(text="", extra_info=extra_info or {})]
-        
-        boundary = boundary_match.group(1)
-        parts = mhtml_content.split(f'--{boundary}')
-        
-        html_content = ""
-        for part in parts:
-            if 'Content-Type: text/html' in part:
-                part_content = re.sub(r'Content-Type: text/html[\s\S]*?Content-Location: [^\n]*\n', '', part)
-                part_content = part_content.strip()
-                if part_content:
-                    html_content = part_content
-                    break
-        
-        if not html_content:
-            return [Document(text="", extra_info=extra_info or {})]
-        
-        # Decode quoted-printable encoding
-        html_content = quopri.decodestring(html_content).decode('utf-8', errors='ignore')
-        html_content = html_content.replace('\r\n', '\n')
-        
-        # Extract visible content
-        soup = BeautifulSoup(html_content, 'lxml')
-        for script in soup(['script', 'style', 'noscript', 'meta', 'link', 'head']):
-            script.extract()
-        
-        text = soup.get_text(separator='\n', strip=True)
-        text = re.sub(r'\n+', '\n', text)
-        
-        return [Document(text=text, extra_info=extra_info or {})]
+# Define MHTMLReader only if RAG is available in local mode
+if RAG_AVAILABLE:
+    class MHTMLReader(BaseReader):
+        """Custom MHTML file reader"""
+        def load_data(self, file_path: str, extra_info: dict = None) -> list[Document]:
+            """Load MHTML file and extract visible content"""
+            with open(file_path, 'rb') as f:
+                mhtml_content = f.read()
+            
+            # Decode to string
+            mhtml_content = mhtml_content.decode('utf-8', errors='ignore')
+            
+            # Find HTML part
+            boundary_match = re.search(r'boundary="([^"]+)"', mhtml_content)
+            if not boundary_match:
+                return [Document(text="", extra_info=extra_info or {})]
+            
+            boundary = boundary_match.group(1)
+            parts = mhtml_content.split(f'--{boundary}')
+            
+            html_content = ""
+            for part in parts:
+                if 'Content-Type: text/html' in part:
+                    part_content = re.sub(r'Content-Type: text/html[\s\S]*?Content-Location: [^\n]*\n', '', part)
+                    part_content = part_content.strip()
+                    if part_content:
+                        html_content = part_content
+                        break
+            
+            if not html_content:
+                return [Document(text="", extra_info=extra_info or {})]
+            
+            # Decode quoted-printable encoding
+            html_content = quopri.decodestring(html_content).decode('utf-8', errors='ignore')
+            html_content = html_content.replace('\r\n', '\n')
+            
+            # Extract visible content
+            soup = BeautifulSoup(html_content, 'lxml')
+            for script in soup(['script', 'style', 'noscript', 'meta', 'link', 'head']):
+                script.extract()
+            
+            text = soup.get_text(separator='\n', strip=True)
+            text = re.sub(r'\n+', '\n', text)
+            
+            return [Document(text=text, extra_info=extra_info or {})]
 
 # Global variables for storing conversation history
 conversation_history = []
@@ -77,19 +110,23 @@ is_multiturn_mode = False
 current_translations = {}
 current_language = "en"
 
-# UI-Ins server configuration
-UI_INS_API_URL = "http://localhost:2345/v1/chat/completions"
+# UI-Ins server configuration (loaded from .env if available)
+UI_INS_API_URL = os.getenv("UI_INS_API_URL", "http://localhost:2345/v1/chat/completions")
 
-# Global variables for RAG functionality
-index = None
-retriever = None
-rag_enabled = False
+# RAG configuration (always define, but only used when RAG_AVAILABLE is True)
+RAG_API_BASE = os.getenv("RAG_API_BASE", "http://localhost:11434/v1")
+RAG_EMBED_MODEL = os.getenv("RAG_EMBED_MODEL", "qwen3-embedding:0.6b")
+RAG_INDEX_DIR = os.getenv("RAG_INDEX_DIR", "./index")
+RAG_DOCS_DIR = os.getenv("RAG_DOCS_DIR", "./docs")
 
-# LlamaIndex configuration
-RAG_API_BASE = "http://localhost:11434/v1"
-RAG_EMBED_MODEL = "qwen3-embedding:0.6b"
-RAG_INDEX_DIR = "./index"
-RAG_DOCS_DIR = "./docs"
+# Global variables for RAG functionality (only available when RAG_AVAILABLE is True)
+if RAG_AVAILABLE:
+    index = None
+    retriever = None
+    rag_enabled = False
+else:
+    # In online mode, RAG is not available
+    rag_enabled = False
 
 
 def load_translations(lang_code: str = "en") -> Dict[str, Any]:
@@ -158,8 +195,11 @@ def encode_image_to_base64(image_path: str) -> str:
 
 def setup_llamaindex():
     """
-    Set up LlamaIndex environment
+    Set up LlamaIndex environment (only available when RAG_MODE is local)
     """
+    if not RAG_AVAILABLE:
+        raise Exception("LlamaIndex is not available when RAG_MODE is online")
+    
     from llama_index.core import Settings
     Settings.embed_model = OpenAIEmbedding(
         model_name=RAG_EMBED_MODEL,
@@ -169,9 +209,13 @@ def setup_llamaindex():
 
 def build_index_from_docs(docs_dir: str = RAG_DOCS_DIR, index_dir: str = RAG_INDEX_DIR) -> bool:
     """
-    Build index from document directory
+    Build index from document directory (only available when RAG_MODE is local)
     """
     global is_multiturn_mode
+    
+    if not RAG_AVAILABLE:
+        print("⚠️  RAG functionality is only available when RAG_MODE is set to 'local'")
+        return False
     
     # Check if in multiturn conversation mode
     if is_multiturn_mode:
@@ -211,11 +255,14 @@ def build_index_from_docs(docs_dir: str = RAG_DOCS_DIR, index_dir: str = RAG_IND
         return False
 
 
-def load_index(index_dir: str = RAG_INDEX_DIR) -> VectorStoreIndex:
+def load_index(index_dir: str = RAG_INDEX_DIR) -> "VectorStoreIndex":
     """
-    Load index from directory
+    Load index from directory (only available when RAG_MODE is local)
     """
     global is_multiturn_mode
+    
+    if not RAG_AVAILABLE:
+        raise Exception("LlamaIndex is not available when RAG_MODE is online")
     
     # Check if in multiturn conversation mode
     if is_multiturn_mode:
@@ -232,9 +279,12 @@ def load_index(index_dir: str = RAG_INDEX_DIR) -> VectorStoreIndex:
 
 def retrieve_relevant_docs(query: str, top_k: int = 3) -> List[str]:
     """
-    Retrieve relevant documents from index based on query
+    Retrieve relevant documents from index based on query (only available when RAG_MODE is local)
     """
     global index, retriever, is_multiturn_mode
+    
+    if not RAG_AVAILABLE:
+        return []
     
     # Check if in multiturn conversation mode
     if is_multiturn_mode:
@@ -277,14 +327,68 @@ def retrieve_relevant_docs(query: str, top_k: int = 3) -> List[str]:
 
 def test_api_connection(api_url: str) -> bool:
     """
-    Test if API connection is working
+    Test if API connection is working by making a simple chat request
     """
     try:
-        # Try to get model list
+        logger.info(f"Testing API connection to: {api_url}")
+        
+        # First, try to get model list (for APIs that support it)
         models_endpoint = api_url.replace("/chat/completions", "/models")
-        test_response = requests.get(models_endpoint, timeout=5)
-        return test_response.status_code == 200
-    except:
+        try:
+            test_response = requests.get(models_endpoint, timeout=5)
+            logger.debug(f"Models endpoint test status: {test_response.status_code}")
+            if test_response.status_code == 200:
+                logger.info("API connection successful (models endpoint)")
+                return True
+        except Exception as e:
+            logger.debug(f"Models endpoint not available: {str(e)}")
+        
+        # If models endpoint doesn't work, try a simple chat completion request
+        # This is more reliable for APIs like Dashscope
+        llm_api_key = os.getenv("LLM_API_KEY", "EMPTY")
+        test_payload = {
+            "messages": [
+                {"role": "user", "content": "ping"}
+            ],
+            "max_tokens": 10,
+            "model": os.getenv("MODEL", "default")
+        }
+        
+        logger.debug(f"Sending test request to {api_url}")
+        test_response = requests.post(
+            api_url,
+            json=test_payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {llm_api_key}"
+            },
+            timeout=5
+        )
+        
+        logger.info(f"API test response status: {test_response.status_code}")
+        logger.debug(f"API test response: {test_response.text}")
+        
+        if test_response.status_code == 200:
+            logger.info("API connection successful (chat endpoint)")
+            return True
+        elif test_response.status_code == 401:
+            logger.error("API authentication failed - check LLM_API_KEY")
+            return False
+        elif test_response.status_code == 404:
+            logger.error("API endpoint not found - check API_URL and MODEL")
+            return False
+        else:
+            logger.warning(f"API returned status {test_response.status_code}")
+            return False
+            
+    except requests.exceptions.Timeout:
+        logger.error("API connection test timed out")
+        return False
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"Cannot connect to API: {str(e)}")
+        return False
+    except Exception as e:
+        logger.error(f"API connection test failed: {str(e)}", exc_info=True)
         return False
 
 
@@ -348,7 +452,13 @@ def get_api_response(prompt: str, api_url: str = "http://localhost:11434/v1/chat
             }
         
         # Get API key from environment variable, use "EMPTY" as default if not found
-        api_key = os.getenv("API_KEY", "EMPTY")
+        llm_api_key = os.getenv("LLM_API_KEY", "EMPTY")
+        
+        # Log request details
+        logger.debug(f"API URL: {api_url}")
+        logger.debug(f"Model: {model}")
+        logger.debug(f"Payload: {json.dumps(payload, indent=2, ensure_ascii=False)}")
+        logger.debug(f"Headers: Content-Type: application/json, Authorization: Bearer [hidden]")
         
         # Send POST request
         response = requests.post(
@@ -356,10 +466,15 @@ def get_api_response(prompt: str, api_url: str = "http://localhost:11434/v1/chat
             json=payload,
             headers={
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}"
+                "Authorization": f"Bearer {llm_api_key}"
             },
             timeout=120
         )
+        
+        # Log response details
+        logger.info(f"API Response Status: {response.status_code}")
+        logger.debug(f"Response Headers: {dict(response.headers)}")
+        logger.debug(f"Response Body: {response.text}")
         
         # Check response status
         if response.status_code == 200:
@@ -381,13 +496,18 @@ def get_api_response(prompt: str, api_url: str = "http://localhost:11434/v1/chat
             else:
                 return _("api_errors.no_response")
         else:
+            logger.error(f"API request failed with status {response.status_code}")
+            logger.error(f"Response text: {response.text}")
             return _("api_errors.status_error", code=response.status_code)
             
     except requests.exceptions.Timeout:
+        logger.error("API request timed out")
         return _("api_errors.timeout")
-    except requests.exceptions.ConnectionError:
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"Connection error: {str(e)}")
         return _("api_errors.connection_error")
     except Exception as e:
+        logger.error(f"Unexpected error in get_api_response: {str(e)}", exc_info=True)
         return _("api_errors.error_occurred", error=str(e))
 
 
@@ -655,7 +775,13 @@ def call_ui_ins_api(image_path: str, instruction: str, ui_ins_api_url: str, ui_i
         "model": ui_ins_model
     }
 
-    api_key = os.getenv("API_KEY", "EMPTY")
+    ui_ins_api_key = os.getenv("UI_INS_API_KEY", "EMPTY")
+    
+    # Log request details
+    logger.debug(f"UI-Ins API URL: {ui_ins_api_url}")
+    logger.debug(f"UI-Ins Model: {ui_ins_model}")
+    logger.debug(f"UI-Ins Instruction: {instruction}")
+    logger.debug(f"UI-Ins Payload (image base64 truncated): {json.dumps({**payload, 'messages': [{**msg, 'content': '[truncated]' if isinstance(msg.get('content'), list) else msg.get('content')} for msg in payload.get('messages', [])]}, indent=2, ensure_ascii=False)}")
     
     # Send request
     try:
@@ -664,20 +790,29 @@ def call_ui_ins_api(image_path: str, instruction: str, ui_ins_api_url: str, ui_i
             json=payload,
             headers={
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}"
+                "Authorization": f"Bearer {ui_ins_api_key}"
             },
             timeout=120
         )
         
+        logger.info(f"UI-Ins API Response Status: {response.status_code}")
+        logger.debug(f"UI-Ins Response Headers: {dict(response.headers)}")
+        logger.debug(f"UI-Ins Response Body: {response.text}")
+        
         if response.status_code == 200:
             data = response.json()
             if "choices" in data and len(data["choices"]) > 0:
-                return data["choices"][0]["message"]["content"].strip()
+                result = data["choices"][0]["message"]["content"].strip()
+                logger.info(f"UI-Ins API success: {result}")
+                return result
             else:
+                logger.warning("UI-Ins API: No response choices found")
                 return "UI-Ins API: No response choices found"
         else:
+            logger.error(f"UI-Ins API Error: {response.status_code} - {response.text}")
             return f"UI-Ins API Error: {response.status_code} - {response.text}"
     except Exception as e:
+        logger.error(f"UI-Ins API Connection Error: {str(e)}", exc_info=True)
         return f"UI-Ins API Connection Error: {str(e)}"
 
 
@@ -727,6 +862,13 @@ def print_header():
     print(_("feature_list.friendly_ui"))
     print(_("feature_list.error_handling"))
     print(_("feature_list.ui_element_locator"))
+    print("=" * 60)
+    
+    # Print execution modes
+    print("\n📋 Execution Modes:")
+    print(f"   LLM Mode: {LLM_MODE.upper()} {'(Using remote API)' if LLM_MODE == 'online' else '(Local model)'}")
+    print(f"   UI-INS Mode: {UI_INS_MODE.upper()} {'(Using remote API)' if UI_INS_MODE == 'online' else '(Local model)'}")
+    print(f"   RAG Mode: {RAG_MODE.upper()} {'(Disabled)' if RAG_MODE == 'online' else '(Local index available)'}")
     print("=" * 60)
 
 
@@ -786,26 +928,44 @@ def main():
     
     print_header()
     
-    # Default API address
-    api_url = "http://localhost:11434/v1/chat/completions"
-    model = "qwen3-vl:32b"
+    # Environment variables are already loaded at module startup
+    # Load configuration from .env if explicitly set
+    api_url_configured = "API_URL" in os.environ
+    model_configured = "MODEL" in os.environ
+    ui_ins_api_url_configured = "UI_INS_API_URL" in os.environ
+    ui_ins_model_configured = "UI_INS_MODEL" in os.environ
     
-    # UI-Ins default configuration
-    ui_ins_api_url = "http://localhost:2345/v1/chat/completions"
-    ui_ins_model = "ui-ins-7b"
+    # Get API configuration
+    api_url = os.getenv("API_URL", "http://localhost:11434/v1/chat/completions")
+    model = os.getenv("MODEL", "qwen3-vl:32b")
     
-    # Get user input API address (optional)
-    print(f"\n{_("messages.config_api")}")
-    print(_("messages.default_address", api_url=api_url))
-    custom_api = input(_("messages.enter_custom_api")).strip()
-    if custom_api:
-        api_url = custom_api
+    # Get UI-Ins configuration
+    ui_ins_api_url = os.getenv("UI_INS_API_URL", "http://localhost:2345/v1/chat/completions")
+    ui_ins_model = os.getenv("UI_INS_MODEL", "ui-ins-7b")
     
-    # Get user input model name (optional)
-    print(_("messages.default_model", model=model))
-    custom_model = input(_("messages.enter_custom_model")).strip()
-    if custom_model:
-        model = custom_model
+    # Only prompt for API configuration if not configured in .env
+    if not api_url_configured or not model_configured:
+        print(f"\n{_("messages.config_api")}")
+        
+        if not api_url_configured:
+            print(_("messages.default_address", api_url=api_url))
+            custom_api = input(_("messages.enter_custom_api")).strip()
+            if custom_api:
+                api_url = custom_api
+        else:
+            print(f"   Using API URL from .env: {api_url}")
+        
+        if not model_configured:
+            print(_("messages.default_model", model=model))
+            custom_model = input(_("messages.enter_custom_model")).strip()
+            if custom_model:
+                model = custom_model
+        else:
+            print(f"   Using model from .env: {model}")
+    else:
+        print(f"\n✓ API Configuration loaded from .env")
+        print(f"   API URL: {api_url}")
+        print(f"   Model: {model}")
     
     # Test connection
     print(_("messages.connecting", api_url=api_url))
@@ -815,17 +975,29 @@ def main():
         print(_("messages.connection_warning"))
         print(_("messages.connection_advice"))
     
-    # UI-Ins configuration
-    print(f"\n{_("messages.config_ui_ins")}")
-    print(_("messages.default_ui_ins_address", ui_ins_api_url=ui_ins_api_url))
-    custom_ui_ins_api = input(_("messages.enter_custom_ui_ins_api")).strip()
-    if custom_ui_ins_api:
-        ui_ins_api_url = custom_ui_ins_api
-    
-    print(_("messages.default_ui_ins_model", ui_ins_model=ui_ins_model))
-    custom_ui_ins_model = input(_("messages.enter_custom_ui_ins_model")).strip()
-    if custom_ui_ins_model:
-        ui_ins_model = custom_ui_ins_model
+    # Only prompt for UI-Ins configuration if not configured in .env
+    if not ui_ins_api_url_configured or not ui_ins_model_configured:
+        print(f"\n{_("messages.config_ui_ins")}")
+        
+        if not ui_ins_api_url_configured:
+            print(_("messages.default_ui_ins_address", ui_ins_api_url=ui_ins_api_url))
+            custom_ui_ins_api = input(_("messages.enter_custom_ui_ins_api")).strip()
+            if custom_ui_ins_api:
+                ui_ins_api_url = custom_ui_ins_api
+        else:
+            print(f"   Using UI-Ins API URL from .env: {ui_ins_api_url}")
+        
+        if not ui_ins_model_configured:
+            print(_("messages.default_ui_ins_model", ui_ins_model=ui_ins_model))
+            custom_ui_ins_model = input(_("messages.enter_custom_ui_ins_model")).strip()
+            if custom_ui_ins_model:
+                ui_ins_model = custom_ui_ins_model
+        else:
+            print(f"   Using UI-Ins model from .env: {ui_ins_model}")
+    else:
+        print(f"\n✓ UI-Ins Configuration loaded from .env")
+        print(f"   UI-Ins API URL: {ui_ins_api_url}")
+        print(f"   UI-Ins Model: {ui_ins_model}")
     
     # Test UI-Ins connection
     print(_("messages.connecting_ui_ins", ui_ins_api_url=ui_ins_api_url))
@@ -933,7 +1105,9 @@ def main():
             if user_input.lower() == '/image':
                 # Get image from server
                 print(_("messages.getting_image"))
-                image_path = get_last_image_from_server()
+                openterface_host = os.getenv("OPENTERFACE_HOST", "localhost")
+                openterface_port = int(os.getenv("OPENTERFACE_PORT", "12345"))
+                image_path = get_last_image_from_server(host=openterface_host, port=openterface_port)
                 print(_("messages.server_response", response=image_path))
                 if image_path and image_path.startswith("./images"):
                     print(_("messages.image_obtained", filename=os.path.basename(image_path)))

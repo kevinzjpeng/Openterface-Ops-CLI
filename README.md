@@ -34,20 +34,100 @@ Openterface Ops CLI is an intelligent dialogue client that integrates Openterfac
 
 ### Environment Requirements
 - Python 3.12
-- Dependencies: `requests`, `Pillow`, `llama-index`, `beautifulsoup4`
+- Dependencies: `requests`, `Pillow`, `llama-index`, `beautifulsoup4`, `python-dotenv`
 
 ### Install Dependencies
 ```bash
 pip install -r requirements_ops_cli.txt
 ```
 
-### Configuration Files
+### Environment Configuration
+
+The application uses a `.env` file for configuration. This allows you to customize all settings without modifying the code.
+
+#### Setup .env File
+
+1. Copy the example configuration:
+```bash
+cp .env.example .env
+```
+
+2. Edit the `.env` file with your specific settings:
+```bash
+nano .env
+# or use your preferred editor
+```
+
+#### Configuration Sections
+
+The `.env` file is organized into 5 main sections:
+
+**1. Openterface Device Configuration**
+```
+OPENTERFACE_HOST=localhost      # Device IP or hostname
+OPENTERFACE_PORT=12345          # TCP port for device connection
+```
+
+**2. Main AI API Configuration**
+```
+API_URL=http://localhost:11434/v1/chat/completions    # Your LLM API endpoint
+MODEL=qwen3-vl:32b                                      # Model name to use
+```
+
+**3. UI-Ins Element Localization Model**
+```
+UI_INS_API_URL=http://localhost:2345/v1/chat/completions  # UI-Ins API endpoint
+UI_INS_MODEL=ui-ins-7b                                      # UI element detection model
+```
+
+**4. API Authentication**
+```
+API_KEY=EMPTY                   # Set to your API key if authentication is required
+```
+
+**5. RAG Configuration**
+```
+RAG_API_BASE=http://localhost:11434/v1
+RAG_EMBED_MODEL=qwen3-embedding:0.6b
+RAG_INDEX_DIR=./index           # Directory to store built indexes
+RAG_DOCS_DIR=./docs             # Directory containing source documents
+```
+
+#### Configuration Files
 - Translation files are located in the `i18n` directory
-- RAG Configuration:
-  - `RAG_API_BASE`: Local API address (default: `http://localhost:11434/v1`)
-  - `RAG_EMBED_MODEL`: Embedding model (default: `qwen3-embedding:0.6b`)
-  - `RAG_INDEX_DIR`: Index storage directory (default: `./index`)
-  - `RAG_DOCS_DIR`: Document directory (default: `./docs`)
+- Configuration template: `.env.example` (reference for all available options)
+- Configuration file: `.env` (your custom settings, not tracked by git)
+
+#### Common Configuration Examples
+
+**Using Ollama locally:**
+```
+API_URL=http://localhost:11434/v1/chat/completions
+MODEL=qwen3-vl:32b
+```
+
+**Using vLLM:**
+```
+API_URL=http://localhost:8000/v1/chat/completions
+MODEL=your-model-name
+```
+
+**Using LM Studio:**
+```
+API_URL=http://localhost:1234/v1/chat/completions
+MODEL=local-model
+```
+
+**Using remote device (not localhost):**
+```
+OPENTERFACE_HOST=192.168.1.100
+OPENTERFACE_PORT=12345
+```
+
+**With API authentication:**
+```
+API_KEY=your-actual-api-key
+```
 
 ## Usage Guide
 
@@ -57,17 +137,41 @@ pip install -r requirements_ops_cli.txt
 python ops_cli.py
 ```
 
-### Initial Configuration
+### Initial Setup
 
-When you first run the application, you will be prompted to configure:
+Before running the application for the first time:
 
-1. **API URL**: Default is `http://localhost:11434/v1/chat/completions`
-2. **VLM Model**: Default is "qwen3-vl:32b"
-3. **UI-Ins API URL**: Default is `http://localhost:2345/v1/chat/completions`
-4. **UI-Ins Model**: Default is "ui-ins-7b"
+1. **Install dependencies:**
+   ```bash
+   pip install -r requirements_ops_cli.txt
+   ```
 
-*Note: The recommended online VLM model is "qwen3-vl-32b-thinking" on ModelScope.
-*Note: The UI-Ins model is used for element localization in image-based conversations. If you don't have a local UI-Ins server, you can use the model "gui-plus" on ModelScope.
+2. **Configure your environment:**
+   ```bash
+   cp .env.example .env
+   nano .env  # Edit with your actual settings
+   ```
+
+3. **Verify your configuration:**
+   - Ensure all API endpoints are correctly set
+   - Check that device host and port are correct
+   - Verify any required API keys are set
+
+4. **Start the application:**
+   ```bash
+   python ops_cli.py
+   ```
+
+### Runtime Configuration
+
+When the application starts, it loads all settings from the `.env` file. You will be prompted to optionally override settings interactively:
+
+1. **API Configuration** - You can accept defaults or enter custom API URL
+2. **Model Name** - You can accept the default model or specify a different one
+3. **UI-Ins Configuration** - Optional configuration for UI element detection
+4. **Connection Test** - The app will verify connectivity to your API endpoints
+
+*Note: Settings in `.env` are used as defaults. Interactive prompts allow you to temporarily override them without editing the file.*
 
 ### Interactive Commands
 
